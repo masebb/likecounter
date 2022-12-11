@@ -1,0 +1,4 @@
+POST http://localhost:1323/v1/like
+Content-Type: application/json
+
+{"increment": 1}
