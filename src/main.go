@@ -22,6 +22,7 @@ func main() {
 	e.Logger.Fatal(e.Start(":1323"))
 }
 
+// Request なぜリクエストにURLパラメータを含めないのか : クライアント側で自身のURLを組み立てるのは面倒だし、別にリファラを見ることで事足りるため
 type Request struct {
 	Increment int `json:"increment"`
 }
@@ -29,7 +30,7 @@ type PostResponse struct {
 	Error string `json:"error"`
 }
 type GetResponse struct {
-	Like int `"json:like"`
+	Like int `json:like`
 }
 
 func likeGet(c echo.Context) error {
@@ -39,7 +40,12 @@ func likeGet(c echo.Context) error {
 	if err := c.Bind(post); err != nil {
 		return c.NoContent(http.StatusBadRequest)
 	}
-
+	refurl := c.Request().Header.Get("Referer")
+	resp.Like, _ = db.GetLike(refurl)
+	err := c.JSON(http.StatusOK, resp)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 func likeIncrement(c echo.Context) error {
@@ -72,14 +78,4 @@ func likeIncrement(c echo.Context) error {
 	}
 	resp.Error = ""
 	return c.JSON(http.StatusOK, resp)
-}
-
-// TODO
-// 初めていいねのリクエストが送られるものに本当にその記事は存在するのかチェックする
-func isUrlExist(url string) bool {
-	req, _ := http.Get(url)
-	if req.StatusCode != http.StatusOK {
-		return false
-	}
-	return true
 }

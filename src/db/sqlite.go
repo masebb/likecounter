@@ -42,16 +42,13 @@ func Init() {
 }
 
 // GetLike intが0を返したらエラーです
-func GetLike(url string) (error, int) {
+func GetLike(url string) (int, error) {
 	if notContainBaseURL(url) {
-		return errors.New("URL is not in baseurl(not valid domain)"), 0
+		return 0, errors.New("URL is not in baseurl(not valid domain)")
 	}
-	selectResult, err := dbmap.Select(like{}, "select * from "+baseurl[0]+" where url=?", url)
+	result, err := dbmap.Get(like{}, url)
 	checkErr(err, "select failed")
-	if len(selectResult) > 2 {
-		return errors.New("select result more than 2 (DataBase mismatch error)"), 0
-	}
-	selectResult
+	return result.(like).Like, nil
 }
 
 // LikeInc いいね数を増やす
@@ -61,14 +58,10 @@ func LikeInc(url string, inc int) error {
 		return errors.New("URL is not in baseurl(not valid domain)")
 	}
 	//select
-	selectResult, err := dbmap.SelectOne(like{}, "select * from "+baseurl[0]+" where url=?", url)
+	result, err := dbmap.Get(like{}, url)
 	checkErr(err, "select failed")
-	////検索結果が2つ以上出た場合
-	//if len(selectResult) > 2 {
-	//	return errors.New("select result more than 2 (DataBase mismatch error)")
-	//}
 	//すでにDBに存在しない場合は新規登録
-	if len(selectResult) == 0 {
+	if result == nil {
 		//記事の存在を検証
 		if req, err := http.Get(url); err != nil || req.StatusCode != http.StatusOK {
 			checkErr(err, "http.Get failed")
@@ -78,7 +71,7 @@ func LikeInc(url string, inc int) error {
 		checkErr(err, "Insert failed")
 	}
 	//すでにDBに存在する場合はupdate
-	_, err = dbmap.Update(&like{URL: url, Like: selectResult[0].(like).Like + inc, LastUpdatedUnixTime: sql.NullInt64{time.Now().Unix(), false}})
+	_, err = dbmap.Update(&like{URL: url, Like: result.(like).Like + inc, LastUpdatedUnixTime: sql.NullInt64{time.Now().Unix(), false}})
 	checkErr(err, "likeIncrement : update Failed")
 	return nil
 }
