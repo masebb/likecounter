@@ -3,28 +3,19 @@ package main
 import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"log"
+	"likeapiserver/src/db"
 	"net/http"
 )
 
-// 仮実装//
-
-var (
-	like    int
-	baseurl = []string{"https://powerfulfamily.net/"}
-)
-
-//仮実装//
-
 func main() {
 	//DB初期化
-	dbinit()
-
+	db.Init()
 	//Echo初期化
 	e := echo.New()
 	//レートリミッター(5req/sec)
 	e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(5)))
 	e.POST("/v1/like", likeIncrement)
+	e.GET("/v1/like", likeGet)
 	e.GET("/", func(c echo.Context) error {
 		return c.String(http.StatusOK, "It works!")
 	})
@@ -34,41 +25,52 @@ func main() {
 type Request struct {
 	Increment int `json:"increment"`
 }
-type Response struct {
-	Like  int    `json:"like"`
+type PostResponse struct {
 	Error string `json:"error"`
 }
+type GetResponse struct {
+	Like int `"json:like"`
+}
 
-func likeIncrement(c echo.Context) error {
+func likeGet(c echo.Context) error {
 	post := new(Request)
-	resp := new(Response)
+	resp := new(GetResponse)
 	//リクエストのパース
 	if err := c.Bind(post); err != nil {
-		resp.Like = like
+		return c.NoContent(http.StatusBadRequest)
+	}
+
+	return nil
+}
+func likeIncrement(c echo.Context) error {
+	post := new(Request)
+	resp := new(PostResponse)
+	//リクエストのパース
+	if err := c.Bind(post); err != nil {
 		resp.Error = "Bad Request"
 		return c.JSON(http.StatusBadRequest, resp)
 	}
-	//0はありえない
-	if post.Increment == 0 {
-		resp.Like = like
+	//0以下はありえない
+	if post.Increment < 0 {
 		resp.Error = "Bad Request"
 		return c.JSON(http.StatusBadRequest, resp)
 	}
-	//いいねが多すぎる場合はシャットアウト
+	//いいねが多すぎる場合は拒否
 	if post.Increment > 31 {
-		resp.Like = like
 		resp.Error = "increment is too large"
 		return c.JSON(http.StatusBadRequest, resp)
 	}
-	////リファラを見て代入
-	rurl := c.Request().Header.Get("Referer")
+	//リファラを見て代入
+	refurl := c.Request().Header.Get("Referer")
 
 	//いいねの数を増やす
-	//TODO DB化
-	//URLチェック後にDB投入
-	like = like + post.Increment
-	//レスポンスにlikeの数を入れる
-	resp.Like = like
+	err := db.LikeInc(refurl, post.Increment)
+	if err != nil {
+		//DBエラー
+		resp.Error = "Internal Error"
+		return c.JSON(http.StatusInternalServerError, resp)
+	}
+	resp.Error = ""
 	return c.JSON(http.StatusOK, resp)
 }
 
@@ -80,10 +82,4 @@ func isUrlExist(url string) bool {
 		return false
 	}
 	return true
-}
-
-func checkErr(err error, msg string) {
-	if err != nil {
-		log.Fatalln("Error : "+msg, err)
-	}
 }
