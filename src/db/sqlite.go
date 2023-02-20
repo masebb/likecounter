@@ -2,17 +2,12 @@ package db
 
 import (
 	"database/sql"
-	"errors"
 	_ "github.com/mattn/go-sqlite3"
 	"gopkg.in/gorp.v2"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 )
-
-// TODO  仮実装(configから読むべき)
-var baseurl = []string{"https://powerfulfamily.net/"}
 
 /*
 テーブル構成
@@ -20,70 +15,67 @@ var baseurl = []string{"https://powerfulfamily.net/"}
 いいね数 : int
 */
 type like struct {
-	URL                 string        "db:url, primarykey notnull" //SQLiteでは歴史的経緯で主キーがnullで登録できてしまうらしいのでnotnull必須
-	Like                int           "db:like notnull"
-	LastUpdatedUnixTime sql.NullInt64 "db:last_updated_unixtime"
+	URL                 string        `db:"url, primarykey, notnull"` //SQLiteでは歴史的経緯で主キーがnullで登録できてしまうらしいのでnotnull必須
+	Like                int           `db:"like, notnull"`
+	LastUpdatedUnixTime sql.NullInt64 `db:"last_updated_unixtime, notnull"`
 }
 
-var dbmap *gorp.DbMap
-
 // Init DB初期化
-func Init() {
+func Init(baseurl string) *gorp.DbMap {
 	db, err := sql.Open("sqlite3", "./likeapiserver.db")
-	checkErr(err, "sql.Open Failed")
-	defer db.Close()
-
+	if err != nil {
+		log.Fatal("sql.Open Failed")
+	}
 	dbmap := &gorp.DbMap{Db: db, Dialect: gorp.SqliteDialect{}} //gorpの初期化
-
 	//データベースのテーブルを作成
-	dbmap.AddTableWithName(like{}, baseurl[0]) //TODO baseurl[0]は仮
+	dbmap.AddTableWithName(like{}, baseurl)
 	err = dbmap.CreateTablesIfNotExists()
-	checkErr(err, "Create table failed")
+	if err != nil {
+		log.Fatal("Create table failed : %s", err)
+	}
+
+	return dbmap
 }
 
 // GetLike intが0を返したらエラーです
-func GetLike(url string) (int, error) {
-	if notContainBaseURL(url) {
-		return 0, errors.New("URL is not in baseurl(not valid domain)")
+func GetLike(url string, dbmap *gorp.DbMap) (int, error) {
+	resultobj, err := dbmap.Get(like{}, url)
+	if err != nil {
+		return 0, err
 	}
-	result, err := dbmap.Get(like{}, url)
-	checkErr(err, "select failed")
-	return result.(like).Like, nil
+	return resultobj.(like).Like, nil
 }
 
 // LikeInc いいね数を増やす
-func LikeInc(url string, inc int) error {
-	//URLが正しいか検証
-	if notContainBaseURL(url) {
-		return errors.New("URL is not in baseurl(not valid domain)")
-	}
+func LikeInc(url string, inc int, dbmap *gorp.DbMap) error {
 	//select
-	result, err := dbmap.Get(like{}, url)
-	checkErr(err, "select failed")
+	resultobj, err := dbmap.Get(like{}, url)
+	if err != nil {
+		log.Printf("dbmap.Get failed : %s", err)
+		return err
+	}
 	//すでにDBに存在しない場合は新規登録
-	if result == nil {
-		//記事の存在を検証
+	if resultobj == nil {
+		//記事の存在をHTTPリクエストで検証
 		if req, err := http.Get(url); err != nil || req.StatusCode != http.StatusOK {
-			checkErr(err, "http.Get failed")
+			if err != nil {
+				log.Printf("http.Get failed : %s", err)
+				return err
+			}
 		}
 		//挿入
-		err := dbmap.Insert(&like{URL: url, Like: 0 + inc, LastUpdatedUnixTime: sql.NullInt64{}})
-		checkErr(err, "Insert failed")
+		err := dbmap.Insert(&like{URL: url, Like: 0 + inc, LastUpdatedUnixTime: sql.NullInt64{time.Now().Unix(), true}})
+		if err != nil {
+			log.Printf("dbmap.Insert failed : %s", err)
+			return err
+		}
+		return nil
 	}
 	//すでにDBに存在する場合はupdate
-	_, err = dbmap.Update(&like{URL: url, Like: result.(like).Like + inc, LastUpdatedUnixTime: sql.NullInt64{time.Now().Unix(), false}})
-	checkErr(err, "likeIncrement : update Failed")
-	return nil
-}
-
-func checkErr(err error, msg string) {
+	_, err = dbmap.Update(&like{URL: url, Like: resultobj.(like).Like + inc, LastUpdatedUnixTime: sql.NullInt64{time.Now().Unix(), true}})
 	if err != nil {
-		log.Fatalln("Error : "+msg, err)
+		log.Printf("dbmap.Update failed : %s", err)
+		return err
 	}
-}
-func notContainBaseURL(url string) bool {
-	if strings.Contains(url, baseurl[0]) {
-		return true
-	}
-	return false
+	return nil
 }
