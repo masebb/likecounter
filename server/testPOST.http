@@ -1,0 +1,6 @@
+POST localhost:1323/v1/like?url=https://powerfulfamily.net/
+Content-Type: application/json
+
+{
+"increment": 1
+}
