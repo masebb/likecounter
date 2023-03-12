@@ -23,7 +23,7 @@ type like struct {
 
 // DBInit DB初期化
 func DBInit(baseurl string) *gorp.DbMap {
-	db, err := sql.Open("sqlite3", "./likeapiserver.db")
+	db, err := sql.Open("sqlite3", "./likecounter.db")
 	if err != nil {
 		log.Fatal("sql.Open Failed")
 	}
