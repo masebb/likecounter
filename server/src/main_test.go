@@ -18,12 +18,12 @@ func TestPost(t *testing.T) {
 		wantResponse string
 	}{
 		//正常系
-		{"increment : 1", marshal(Request{1}), http.StatusOK, marshal(Response{1, ""})},
+		{"increment : 1", marshal(PostRequest{1}), http.StatusOK, marshal(PostResponse{1, ""})},
 		//異常系
-		{"incrementの数が多すぎるリクエスト", marshal(Request{100}), http.StatusBadRequest, marshal(Response{1, "increment is too large"})},
+		{"incrementの数が多すぎるリクエスト", marshal(PostRequest{100}), http.StatusBadRequest, marshal(PostResponse{1, "increment is too large"})},
 		//異常系
-		{"アホリクエスト", `{"ahomanuke": "a"}`, http.StatusBadRequest, marshal(Response{1, "Bad Request"})},
-		//{"アホリクエスト", `{"like": "aho"}`, http.StatusBadRequest, marshal(Response{1, ""})},
+		{"アホリクエスト", `{"ahomanuke": "a"}`, http.StatusBadRequest, marshal(PostResponse{1, "Bad PostRequest"})},
+		//{"アホリクエスト", `{"like": "aho"}`, http.StatusBadRequest, marshal(PostResponse{1, ""})},
 	}
 
 	for _, test := range tests {
